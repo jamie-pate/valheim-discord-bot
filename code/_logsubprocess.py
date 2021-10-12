@@ -6,7 +6,7 @@ import config
 
 ## Added new regex define to pickup spaces, if character names have additional characters and are not being picked up add them inside brackets i.e. [\w ']+
 ## regex101.com will assist with making sure names are parsed correctly
-## use pdeath inside quotes as search string
+## use pdeath inside quotes as search criteria
 ## use '10/12/2021 01:14:24: Got character ZDOID from Example : 0:0' as search string
 
 pdeath = '.*?Got character ZDOID from ([\w ]+) : 0:0'
