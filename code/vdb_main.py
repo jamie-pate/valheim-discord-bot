@@ -1,5 +1,4 @@
-import os, time, re, csv, discord, asyncio, config, emoji, sys, colorama, typing, signal, errno
-from valve.source.a2s import ServerQuerier, NoResponseError
+import os, time, re, csv, a2s, discord, asyncio, config, emoji, sys, colorama, typing, signal, errno
 from matplotlib import pyplot as plt
 from datetime import datetime, timedelta
 from colorama import Fore, Style, init
@@ -7,6 +6,7 @@ from config import LOGCHAN_ID as lchanID
 from config import VCHANNEL_ID as chanID
 from config import file
 from discord.ext import commands
+from socket import timeout
 import matplotlib.dates as md
 import matplotlib.ticker as ticker
 import matplotlib.spines as ms
@@ -15,13 +15,10 @@ import pandas as pd
 #Color init
 colorama.init()
 
-pdeath = '.*?Got character ZDOID from (\w+) : 0:0'
+pdeath = '.*?Got character ZDOID from ([\w ]+) : 0:0'
 pevent = '.*? Random event set:(\w+)'
 server_name = config.SERVER_NAME
 bot = commands.Bot(command_prefix=';', help_command=None)
-
-    # maybe in the future for reformatting output of random mob events
-    # eventype = ['Skeletons', 'Blobs', 'Forest Trolls', 'Wolves', 'Surtlings']
 
 def signal_handler(signal, frame):          # Method for catching SIGINT, cleaner output for restarting bot
   os._exit(0)
@@ -169,10 +166,23 @@ async def mainloop(file):
                     line = f.readline()
                     if(re.search(pdeath, line)):
                         pname = re.search(pdeath, line).group(1)
-                        await lchannel.send(':skull: **' + pname + '** just died!')
+                        await lchannel.send(':skull: **' + pname + '** just died a shameful and humiliating death! Everyone laugh!')
                     if(re.search(pevent, line)):
+                        def WhatEvent(eventID):
+                            return { ## event text can be changed below
+                            'army_eikthyr' : 'EIKTHYR RALLIES THE CREATURES OF THE FOREST - 90 Seconds of Boars and Necks!',
+                            'army_theelder' : 'THE FOREST IS MOVING... - 120 Seconds of Various Dwarfs!',
+                            'army_bonemass' : 'A FOUL SMELL FROM THE SWAMP - 150 Seconds of Draugr and Skeletons!',
+                            'army_moder' : 'A COLD WIND BLOWS FROM THE MOUNTAINS - 150 Seconds of Drakes and Cold!',
+                            'army_goblin' : 'THE HORDE IS ATTACKING - 120 Seconds of Fulings!',
+                            'foresttrolls' : 'THE GROUND IS SHAKING - 80 Seconds of Trolls!',
+                            'blobs' : 'A FOUL SMELL FROM THE SWAMP - 120 Seconds of Blobs and Oozers!',
+                            'skeletons' : 'SKELETON SURPRISE - 120 Seconds of Skeletons!',
+                            'surtlings' : 'THERE\'S A SMELL OF SULFUR IN THE AIR - 120 Seconds of Surtlings!',
+                            'wolves' : 'SOMEONE IS BEING HUNTED - 120 Seconds of Wolves!',
+                            }[eventID]
                         eventID = re.search(pevent, line).group(1)
-                        await lchannel.send(':loudspeaker: Random mob event: **' + eventID + '** has occurred')
+                        await lchannel.send(':loudspeaker: **' + WhatEvent(eventID) + '**')
                     await asyncio.sleep(0.2)
     except IOError:
         print('No valid log found, event reports disabled. Please check config.py')
@@ -182,11 +192,10 @@ async def serverstatsupdate():
 	await bot.wait_until_ready()
 	while not bot.is_closed():
 		try:
-			with ServerQuerier(config.SERVER_ADDRESS) as server:
-				channel = bot.get_channel(chanID)
-				await channel.edit(name=f"{emoji.emojize(':eggplant:')} In-Game: {server.info()['player_count']}" +" / 10")
-
-		except NoResponseError:
+			server = a2s.info(config.SERVER_ADDRESS)
+			channel = bot.get_channel(chanID)
+			await channel.edit(name=f"{emoji.emojize(':eggplant:')} In-Game: {server.player_count} / {server.max_players}")
+		except timeout:
 			print(Fore.RED + await timenow(), 'No reply from A2S, retrying (30s)...' + Style.RESET_ALL)
 			channel = bot.get_channel(chanID)
 			await channel.edit(name=f"{emoji.emojize(':cross_mark:')} Server Offline")
