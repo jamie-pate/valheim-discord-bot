@@ -6,11 +6,14 @@ from config import LOGCHAN_ID as lchanID
 from config import VCHANNEL_ID as chanID
 from config import file
 from discord.ext import commands
+import discord
 from socket import timeout
 import matplotlib.dates as md
 import matplotlib.ticker as ticker
 import matplotlib.spines as ms
 import pandas as pd
+import random
+from functools import wraps
 
 #Color init
 colorama.init()
@@ -18,7 +21,23 @@ colorama.init()
 pdeath = '.*?Got character ZDOID from ([\w ]+) : 0:0'
 pevent = '.*? Random event set:(\w+)'
 server_name = config.SERVER_NAME
-bot = commands.Bot(command_prefix=';', help_command=None)
+client = discord.Client(activity=discord.Game(name='Valheim'))
+bot = commands.Bot(command_prefix='/', help_command=None)
+
+_guards = {}
+
+def minimum_timeout(seconds):
+    def wrapper(fn):
+        _guards[fn] = {'timeout': seconds}
+        @wraps(fn)
+        def inner(*args, **kwargs):
+            t = time.time()
+            if 'last' not in _guards[fn] or \
+                t - _guards[fn]['last'] > _guards[fn]['timeout']:
+                _guards[fn]['last'] = t
+                fn(*args, **kwargs)
+        return inner
+    return wrapper
 
 def signal_handler(signal, frame):          # Method for catching SIGINT, cleaner output for restarting bot
   os._exit(0)
@@ -32,7 +51,7 @@ async def timenow():
 
 # Basic file checking
 def check_csvs():
-    try: 
+    try:
         os.makedirs('csv')
     except OSError as e:
         if e.errno != errno.EEXIST:
@@ -48,8 +67,6 @@ def check_csvs():
                 print(Fore.YELLOW + f'{f} doesn\'t exist, creating new...' + Style.RESET_ALL)
             time.sleep(0.2)
 
-check_csvs()
-
 @bot.event
 async def on_ready():
     print(Fore.GREEN + f'Bot connected as {bot.user} :)' + Style.RESET_ALL)
@@ -58,31 +75,39 @@ async def on_ready():
         print('VoIP channel: %d' % (chanID))
         bot.loop.create_task(serverstatsupdate())
 
-@bot.command(name='help')
-async def help_ctx(ctx):  
-    help_embed = discord.Embed(description="[**Valheim Discord Bot**](https://github.com/ckbaudio/valheim-discord-bot)", color=0x33a163,)
-    help_embed.add_field(name="{}stats <n>".format(bot.command_prefix),
-                        value="Plots a graph of connected players over the last X hours.\n Example: `{}stats 12` \n Available: 24, 12, w (*default: 24*)".format(bot.command_prefix),
-                        inline=True)
-    help_embed.add_field(name="{}deaths".format(bot.command_prefix), 
-                        value="Shows a top 5 leaderboard of players with the most deaths. \n Example:`{}deaths`".format(bot.command_prefix),
-                        inline=True)
-    help_embed.set_footer(text="Valbot v0.42")
-    await ctx.send(embed=help_embed)
+#@bot.command(name='help')
+#async def help_ctx(ctx):
+#    help_embed = discord.Embed(description="[**Valheim Discord Bot**](https://github.com/ckbaudio/valheim-discord-bot)", color=0x33a163,)
+#    help_embed.add_field(name="{}stats <n>".format(bot.command_prefix),
+#                        value="Plots a graph of connected players over the last X hours.\n Example: `{}stats 12` \n Available: 24, 12, w (*default: 24*)".format(bot.command_prefix),
+#                        inline=True)
+#    help_embed.add_field(name="{}deaths".format(bot.command_prefix),
+#                        value="Shows a top 5 leaderboard of players with the most deaths. \n Example:`{}deaths`".format(bot.command_prefix),
+#                        inline=True)
+#    help_embed.set_footer(text="Valbot v0.42")
+#    await ctx.send(embed=help_embed)
 
 @bot.command(name="deaths")
 async def leaderboards(ctx):
     top_no = 5
     ldrembed = discord.Embed(title=":skull_crossbones: __Death Leaderboards (top 5)__ :skull_crossbones:", color=0xFFC02C)
-    df = pd.read_csv('csv/deathlog.csv', header=None, usecols=[0, 1])
-    df_index = df[1].value_counts().nlargest(top_no).index
-    df_score = df[1].value_counts().nlargest(top_no)
+    try:
+        df = pd.read_csv('csv/deathlog.csv', header=None, usecols=[0, 1])
+        df_index = df[1].value_counts().nlargest(top_no).index
+        df_score = df[1].value_counts().nlargest(top_no)
+    except pd.errors.EmptyDataError:
+        ldrembed.add_field(name="How did I get here",
+                           value="I am not good with computor",
+                           inline=True)
+        await ctx.send(embed=ldrembed)
+        return
+
     x = 0
     l = 1 #just in case I want to make listed iterations l8r
     for ind in df_index:
         grammarnazi = 'deaths'
         leader = ''
-        # print(df_index[x], df_score[x]) 
+        # print(df_index[x], df_score[x])
         if df_score[x] == 1 :
             grammarnazi = 'death'
         if l == 1:
@@ -117,7 +142,10 @@ async def gen_plot(ctx, tmf: typing.Optional[str] = '24'):
         description = 'Players online in the past ' + timedo + ':'
 
     #Get data from csv
-    df = pd.read_csv('csv/playerstats.csv', header=None, usecols=[0, 1], parse_dates=[0], dayfirst=True)
+    try:
+        df = pd.read_csv('csv/playerstats.csv', header=None, usecols=[0, 1], parse_dates=[0], dayfirst=True)
+    except pd.errors.EmptyDataError:
+        await ctx.send(embed=ldrembed)
     lastday = datetime.now() - timedelta(hours = user_range)
     last24 = df[df[0]>=(lastday)]
 
@@ -138,7 +166,7 @@ async def gen_plot(ctx, tmf: typing.Optional[str] = '24'):
         tick.set_color('gray')
     for tick in ax.get_yticklabels():
         tick.set_color('gray')
-    
+
     #Plot and rasterize figure
     plt.gcf().set_size_inches([5.5,3.0])
     plt.plot(last24[0], last24[1])
@@ -161,12 +189,13 @@ async def mainloop(file):
         testfile.close()
         while not bot.is_closed():
             with open(file, encoding='utf-8', mode='r') as f:
-                f.seek(0,2)
+                f.seek(0,2) # seek to the end of the file
                 while True:
                     line = f.readline()
                     if(re.search(pdeath, line)):
                         pname = re.search(pdeath, line).group(1)
-                        await lchannel.send(':skull: **' + pname + '** just died a shameful and humiliating death! Everyone laugh!')
+                        print(f"Detected death of {pname}")
+                        await lchannel.send(f':skull: **{pname}** just died, F in the chat.')
                     if(re.search(pevent, line)):
                         def WhatEvent(eventID):
                             return { ## event text can be changed below
@@ -182,24 +211,74 @@ async def mainloop(file):
                             'wolves' : 'SOMEONE IS BEING HUNTED - 120 Seconds of Wolves!',
                             }[eventID]
                         eventID = re.search(pevent, line).group(1)
-                        await lchannel.send(':loudspeaker: **' + WhatEvent(eventID) + '**')
-                    await asyncio.sleep(0.2)
+                        await lchannel.send(f':loudspeaker: **{WhatEvent(eventID)}**')
+                    await asyncio.sleep(0.1)
     except IOError:
         print('No valid log found, event reports disabled. Please check config.py')
-        print('To generate server logs, run server with -logfile launch flag')  
-        
+        print('To generate server logs, run server with -logfile launch flag')
+
 async def serverstatsupdate():
 	await bot.wait_until_ready()
 	while not bot.is_closed():
 		try:
 			server = a2s.info(config.SERVER_ADDRESS)
 			channel = bot.get_channel(chanID)
-			await channel.edit(name=f"{emoji.emojize(':eggplant:')} In-Game: {server.player_count}" +" / 10") ## put max server count here
+			await channel.edit(name=f"{emoji.emojize(':eggplant:')} In-Game: {server.player_count} / 10") ## put max server count here
 		except timeout:
 			print(Fore.RED + await timenow(), 'No reply from A2S, retrying (30s)...' + Style.RESET_ALL)
 			channel = bot.get_channel(chanID)
 			await channel.edit(name=f"{emoji.emojize(':cross_mark:')} Server Offline")
 		await asyncio.sleep(30)
-        
-bot.loop.create_task(mainloop(file))
-bot.run(config.BOT_TOKEN)
+
+def otherbeer(name):
+    if name.lower() == "sapporo":
+        return "Asahi"
+    if name.lower() == "asahi":
+        return "Sapporo"
+
+def beer(name):
+    lines = [
+             f"{name.title()}? That's way better than {otherbeer(name)}.",
+             f"How about a nice Tasty Mead instead?",
+            ]
+    response = random.choice(lines)
+    return response
+
+@minimum_timeout(60)
+@bot.command(name='asahi')
+async def beer_cmd_asahi(ctx):
+    print(f"Asahi command invoked.")
+    await ctx.send(beer("asahi"))
+
+@minimum_timeout(60)
+@bot.command(name='sapporo')
+async def beer_cmd_sapporo(ctx):
+    print(f"Sapporo command invoked.")
+    await ctx.send(beer("sapporo"))
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+    if "sapporo" in message.content.lower():
+        await message.channel.send(beer("sapporo"))
+    elif "asahi" in message.content.lower():
+        await message.channel.send(beer("asahi"))
+    elif "kirin" in message.content.lower():
+        await message.channel.send("No one likes Kirin.")
+
+    elif message.content.lower() == "f":
+        await message.add_reaction('🇫')
+
+    elif "${jndi:" in message.content.lower() or \
+        "ldap://" in message.content.lower() or \
+        "';--" in message.content or "\";--" in message.content:
+        await message.add_reaction('🖕')
+
+    # https://discordpy.readthedocs.io/en/stable/faq.html#why-does-on-message-make-my-commands-stop-working
+    await bot.process_commands(message)
+
+if __name__ == "__main__":
+    check_csvs()
+    bot.loop.create_task(mainloop(file))
+    bot.run(config.BOT_TOKEN)

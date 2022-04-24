@@ -6,3 +6,4 @@ emoji==1.2.0
 pandas==1.2.2
 discord==1.0.1
 python_valve==0.2.1
+python-a2s
