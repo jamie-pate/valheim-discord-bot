@@ -1,0 +1,28 @@
+version: "3"
+
+services:
+  valheim:
+    image: lloesche/valheim-server
+    cap_add:
+      - sys_nice
+    volumes:
+      - $HOME/valheim-server/config:/config
+      - $HOME/valheim-server/data:/opt/valheim
+    ports:
+      - "2456-2457:2456-2457/udp"
+    env_file:
+      - $HOME/valheim-server/valheim.env
+    restart: always
+    stop_grace_period: 2m
+
+  valheim-bot:
+    image: valheim-bot:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    depends_on:
+      - valheim
+    volumes:
+      - $HOME/valheim-server/config:/config
+      - $HOME/valheim-server/csv:/usr/src/app/csv
+    restart: always
