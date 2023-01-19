@@ -344,7 +344,7 @@ async def serverstatsupdate():
 		try:
 			server = a2s.info(config.SERVER_ADDRESS)
 			channel = bot.get_channel(chanID)
-			await channel.edit(name=f"Valheim {emoji.emojize(':fire:')}  In-Game: {server.player_count} / 10") ## put max server count here
+			await channel.edit(name=f"Valheim {emoji.emojize(':fire:')} {server.player_count} / 10 in game") ## put max server count here
 		except timeout:
 			print(Fore.RED + await timenow(), 'No reply from A2S, retrying (30s)...' + Style.RESET_ALL)
 			channel = bot.get_channel(chanID)
