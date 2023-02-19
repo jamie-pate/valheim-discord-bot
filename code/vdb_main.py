@@ -281,10 +281,11 @@ async def sendPlayerAnnouncement(newPlayer):
 
     try:
         existingPlayer = players[newPlayer.id]
-        if (newPlayer.disconnected):
-            await lchannel.send(':axe: **' + existingPlayer.name + '** has left the server: ' + server_name)
-        else :
-            await lchannel.send(':axe: **' + existingPlayer.name + '** has entered the server: ' + server_name)
+        if newPlayer.name:
+            if (newPlayer.disconnected):
+                await lchannel.send(':axe: **' + existingPlayer.name + '** has left the server: ' + server_name)
+            else :
+                await lchannel.send(':axe: **' + existingPlayer.name + '** has entered the server: ' + server_name)
 
     except IOError:
         print("Error sending player announcement") 
