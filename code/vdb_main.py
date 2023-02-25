@@ -281,7 +281,7 @@ async def sendPlayerAnnouncement(newPlayer):
 
     try:
         existingPlayer = players[newPlayer.id]
-        if newPlayer.name:
+        if existingPlayer.name:
             if (newPlayer.disconnected):
                 await lchannel.send(':axe: **' + existingPlayer.name + '** has left the server: ' + server_name)
             else :
